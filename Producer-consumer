@@ -1,0 +1,55 @@
+
+#include <iostream>
+#include <mutex>
+#include<condition_variable>
+#include <thread>
+using namespace std;
+
+//class RWLock{
+ //   private:
+        mutex mtx;
+        condition_variable cnv;
+        int n = 1;
+        int dataConsumed = false;
+        void produceData(){
+            cout<<"Data produced "<<n<<" attempt\n";
+        }
+        void consumeData(){
+            cout<<"Data consumed "<<n<<" attempt\n";
+        }
+        
+   // public:
+        void producer(int count){
+            while(n<5){
+                unique_lock<mutex> lock(mtx);
+                produceData();
+                dataConsumed = true;
+                mtx.unlock();
+                cnv.notify_one();
+                cnv.wait(lock,[]() {return dataConsumed == false;});
+            }
+        }
+        
+        void consumer(int count){
+            while(n<5){
+                unique_lock<mutex> lock(mtx);
+                cnv.wait(lock,[]() {return dataConsumed == true;});
+                consumeData();
+                dataConsumed = false;
+                n++;
+                mtx.unlock();
+                cnv.notify_one();
+            }
+        }
+//};
+
+// Driver code
+int main()
+{
+//RWLock rw;
+	thread t1(producer,5);
+	thread t2(consumer,5);
+	t1.join();
+	t2.join();
+}
+
