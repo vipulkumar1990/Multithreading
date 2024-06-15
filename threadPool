@@ -1,0 +1,73 @@
+#include <iostream> 
+#include <vector>
+#include <algorithm>
+#include <thread>
+#include <mutex>
+#include <condition_variable>
+#include <queue>
+#include <functional> 
+
+using namespace std; 
+using tasks = function<void()>; 
+
+class threadPool{
+    private:
+        queue<tasks> task_queue;
+        condition_variable cnv;
+        mutex mtx;
+        vector<thread> threads;
+        bool stop;
+        
+    public:
+        threadPool(int threadsCount){
+            stop = false;
+            for(int i=0;i<threadsCount;i++){
+                threads.emplace_back([this]{
+                    while(1){
+                        unique_lock<mutex> lock(mtx);
+                        cnv.wait(lock,[this]{
+                            return (!task_queue.empty() || stop);
+                        });
+                        if(task_queue.empty() && stop) return;
+                        tasks task = move(task_queue.front());
+                        task_queue.pop();
+                        mtx.unlock();
+                        cnv.notify_one();
+                        task();
+                    }
+                });
+            }
+        }
+        
+        ~threadPool(){
+            unique_lock<mutex> lock(mtx);
+            stop = true;
+            mtx.unlock();
+            cnv.notify_all();
+            for(auto &thread1 : threads)
+                thread1.join();
+        }
+        
+        void enqueue(tasks task){
+            unique_lock<mutex> lock(mtx);
+            task_queue.emplace(move(task));
+            mtx.unlock();
+            cnv.notify_one();
+        }
+
+    
+};
+int main() 
+{ 
+    threadPool pool(4);
+    for(int i=0;i<5;i++){
+        pool.enqueue([i]{
+            cout << "Task " << i << " is running on thread "
+                 << this_thread::get_id() << endl; 
+            // Simulate some work 
+            this_thread::sleep_for( 
+                chrono::milliseconds(1000)); 
+        });
+    }
+    return 0; 
+} 
